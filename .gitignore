@@ -59,6 +59,7 @@ KeyFrameTrajectory.txt
 CameraTrajectory.txt
 kf_*.txt
 f_*.txt
+Thirdparty/opencv/
 Thirdparty/DBoW2/build/
 Thirdparty/DBoW2/lib/
 Thirdparty/g2o/build/
@@ -66,6 +67,7 @@ Thirdparty/g2o/config.h
 Thirdparty/g2o/lib/
 Vocabulary/ORBvoc.txt
 build/
+build_old/
 
 lib/
 
@@ -85,9 +87,12 @@ Table_Euroc
 Table_TUMVI_rooms/
 *.pyc
 *.osa
+.vscode/
 .idea/
 my_settings.txt
 
 borrar/*
 
 */ExecMean.txt
+*.ply
+*.yaml

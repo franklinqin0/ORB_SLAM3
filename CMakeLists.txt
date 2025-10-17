@@ -113,6 +113,13 @@ include/SerializationUtils.h
 include/Config.h
 include/Settings.h)
 
+# Force-disable Werror for this target
+target_compile_options(${PROJECT_NAME} PRIVATE
+    -Wno-error
+    -Wno-error=maybe-uninitialized
+    -Wno-aggressive-loop-optimizations
+)
+
 add_subdirectory(Thirdparty/g2o)
 
 target_link_libraries(${PROJECT_NAME}

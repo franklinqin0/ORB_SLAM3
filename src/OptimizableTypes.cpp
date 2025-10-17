@@ -19,16 +19,18 @@
 #include "OptimizableTypes.h"
 
 namespace ORB_SLAM3 {
-    bool EdgeSE3ProjectXYZOnlyPose::read(std::istream& is){
-        for (int i=0; i<2; i++){
-            is >> _measurement[i];
-        }
+    bool EdgeSE3ProjectXYZOnlyPose::read(std::istream& is) {
         for (int i=0; i<2; i++)
-            for (int j=i; j<2; j++) {
-                is >> information()(i,j);
-                if (i!=j)
-                    information()(j,i)=information()(i,j);
-            }
+            is >> _measurement[i];
+
+        // Read upper triangle explicitly, then mirror
+        double inf00, inf01, inf11;
+        is >> inf00 >> inf01 >> inf11;
+        information().setZero();
+        information()(0,0) = inf00;
+        information()(0,1) = inf01;
+        information()(1,0) = inf01;
+        information()(1,1) = inf11;
         return true;
     }
 

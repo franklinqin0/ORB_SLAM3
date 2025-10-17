@@ -258,16 +258,21 @@ class GDirection
 {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-    GDirection(){}
-    GDirection(Eigen::Matrix3d pRwg): Rwg(pRwg){}
+    GDirection()
+        : Rwg(Eigen::Matrix3d::Identity()),
+          Rgw(Eigen::Matrix3d::Identity()),
+          its(0) {}
 
+    explicit GDirection(const Eigen::Matrix3d &pRwg)
+        : Rwg(pRwg), Rgw(pRwg.transpose()), its(0) {}
     void Update(const double *pu)
     {
-        Rwg=Rwg*ExpSO3(pu[0],pu[1],0.0);
+        Rwg = Rwg * ExpSO3(pu[0], pu[1], 0.0);
+        Rgw = Rwg.transpose();
+        ++its;
     }
 
     Eigen::Matrix3d Rwg, Rgw;
-
     int its;
 };
 

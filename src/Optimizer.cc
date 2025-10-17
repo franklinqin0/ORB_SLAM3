@@ -414,7 +414,7 @@ void Optimizer::FullInertialBA(Map *pMap, int its, const bool bFixLocal, const l
     int nNonFixed = 0;
 
     // Set KeyFrame vertices
-    KeyFrame* pIncKF;
+    KeyFrame* pIncKF = nullptr;
     for(size_t i=0; i<vpKFs.size(); i++)
     {
         KeyFrame* pKFi = vpKFs[i];
@@ -492,10 +492,10 @@ void Optimizer::FullInertialBA(Map *pMap, int its, const bool bFixLocal, const l
                 g2o::HyperGraph::Vertex* VP1 = optimizer.vertex(pKFi->mPrevKF->mnId);
                 g2o::HyperGraph::Vertex* VV1 = optimizer.vertex(maxKFid+3*(pKFi->mPrevKF->mnId)+1);
 
-                g2o::HyperGraph::Vertex* VG1;
-                g2o::HyperGraph::Vertex* VA1;
-                g2o::HyperGraph::Vertex* VG2;
-                g2o::HyperGraph::Vertex* VA2;
+                g2o::HyperGraph::Vertex* VG1 = nullptr;
+                g2o::HyperGraph::Vertex* VA1 = nullptr;
+                g2o::HyperGraph::Vertex* VG2 = nullptr;
+                g2o::HyperGraph::Vertex* VA2 = nullptr;
                 if (!bInit)
                 {
                     VG1 = optimizer.vertex(maxKFid+3*(pKFi->mPrevKF->mnId)+2);
