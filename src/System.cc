@@ -1505,6 +1505,40 @@ bool System::LoadAtlas(int type)
     return false;
 }
 
+
+void System::SaveMapToPLY(const string &filename)
+{
+    vector<Map*> vpMaps = mpAtlas->GetAllMaps();
+    vector<Eigen::Vector3f> pts;
+    pts.reserve(100000);
+
+    for (Map* pMap : vpMaps) {
+        if (!pMap) continue;
+        const vector<MapPoint*> vpMPs = pMap->GetAllMapPoints();
+        for (MapPoint* mp : vpMPs)
+        {
+            if (!mp || mp->isBad()) continue;
+            const Eigen::Vector3f p = mp->GetWorldPos();
+            pts.push_back(p);
+        }
+    }
+
+    ofstream ofs(filename);
+    if(!ofs.is_open()){
+        cout << "Failed to open " << filename << endl;
+        return;
+    }
+    ofs << "ply\nformat ascii 1.0\n";
+    ofs << "element vertex " << pts.size() << "\n";
+    ofs << "property float x\nproperty float y\nproperty float z\n";
+    ofs << "end_header\n";
+    for(const auto& p : pts)
+        ofs << p.x() << " " << p.y() << " " << p.z() << "\n";
+    ofs.close();
+    cout << "Saved " << pts.size() << " points to " << filename << endl;
+}
+
+
 string System::CalculateCheckSum(string filename, int type)
 {
     string checksum = "";

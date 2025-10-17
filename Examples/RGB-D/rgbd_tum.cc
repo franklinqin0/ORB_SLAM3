@@ -134,6 +134,9 @@ int main(int argc, char **argv)
     SLAM.SaveTrajectoryTUM("CameraTrajectory.txt");
     SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");   
 
+    // Save the sparse map as PLY
+    SLAM.SaveMapToPLY("3d_map.ply");
+
     return 0;
 }
 
