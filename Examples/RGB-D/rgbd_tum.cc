@@ -20,6 +20,10 @@
 #include<algorithm>
 #include<fstream>
 #include<chrono>
+#include<sstream>
+#include<vector>
+#include<string>
+#include<unistd.h>
 
 #include<opencv2/core/core.hpp>
 
@@ -32,9 +36,16 @@ void LoadImages(const string &strAssociationFilename, vector<string> &vstrImageF
 
 int main(int argc, char **argv)
 {
-    if(argc != 5)
+    if(argc < 5)
     {
-        cerr << endl << "Usage: ./rgbd_tum path_to_vocabulary path_to_settings path_to_sequence path_to_association" << endl;
+        cerr << endl
+             << "Usage: ./rgbd_tum path_to_vocabulary path_to_settings path_to_sequence path_to_association [options]" << endl
+             << "Options:" << endl
+             << "  --traj <file>            Output camera trajectory file (TUM format). Default: CameraTrajectory.txt" << endl
+             << "  --keyframe-traj <file>   Output keyframe trajectory file (TUM format). Default: KeyFrameTrajectory.txt" << endl
+             << "  --map <file>         Output sparse map as PLY. Default: integrated_mesh_init.ply" << endl
+             << "  --intrinsics <file>      Read 3x3 K matrix (row-major) to override fx, fy, cx, cy" << endl
+             << "  -h, --help               Show this help and exit" << endl;
         return 1;
     }
 
@@ -44,6 +55,55 @@ int main(int argc, char **argv)
     vector<double> vTimestamps;
     string strAssociationFilename = string(argv[4]);
     LoadImages(strAssociationFilename, vstrImageFilenamesRGB, vstrImageFilenamesD, vTimestamps);
+
+    // Optional arguments with defaults
+    string outTrajFile = "CameraTrajectory.txt";
+    string outKFFile = "KeyFrameTrajectory.txt";
+    string outMapPLY = "integrated_mesh_init.ply";
+    string intrinsicsFile = "";
+
+    // Parse optional flags starting from argv[5]
+    for(int i = 5; i < argc; ++i)
+    {
+        string a = argv[i];
+        if(a == "--traj")
+        {
+            if(i + 1 < argc) { outTrajFile = argv[++i]; }
+            else { cerr << "Missing value for --traj" << endl; return 1; }
+        }
+        else if(a == "--keyframe-traj")
+        {
+            if(i + 1 < argc) { outKFFile = argv[++i]; }
+            else { cerr << "Missing value for --keyframe-traj" << endl; return 1; }
+        }
+        else if(a == "--map")
+        {
+            if(i + 1 < argc) { outMapPLY = argv[++i]; }
+            else { cerr << "Missing value for --map" << endl; return 1; }
+        }
+        else if(a == "--intrinsics")
+        {
+            if(i + 1 < argc) { intrinsicsFile = argv[++i]; }
+            else { cerr << "Missing value for --intrinsics" << endl; return 1; }
+        }
+        else if(a == "-h" || a == "--help")
+        {
+            cerr << endl
+                 << "Usage: ./rgbd_tum path_to_vocabulary path_to_settings path_to_sequence path_to_association [options]" << endl
+                 << "Options:" << endl
+                 << "  --traj <file>            Output camera trajectory file (TUM format). Default: CameraTrajectory.txt" << endl
+                 << "  --keyframe-traj <file>   Output keyframe trajectory file (TUM format). Default: KeyFrameTrajectory.txt" << endl
+                 << "  --map <file>         Output sparse map as PLY. Default: integrated_mesh_init.ply" << endl
+                 << "  --intrinsics <file>      Read 3x3 K matrix (row-major) to override fx, fy, cx, cy" << endl
+                 << "  -h, --help               Show this help and exit" << endl;
+            return 0;
+        }
+        else
+        {
+            cerr << "Unknown option: " << a << endl;
+            return 1;
+        }
+    }
 
     // Check consistency in the number of images and depthmaps
     int nImages = vstrImageFilenamesRGB.size();
@@ -58,8 +118,108 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    // Optionally override intrinsics by patching a temporary settings file
+    string settingsPath = string(argv[2]);
+    string patchedSettingsPath;
+    if(!intrinsicsFile.empty())
+    {
+        // Read 3x3 intrinsics matrix (row-major) from text file
+        ifstream fin(intrinsicsFile.c_str());
+        if(!fin.is_open())
+        {
+            cerr << "Failed to open intrinsics file: " << intrinsicsFile << endl;
+            return 1;
+        }
+        vector<double> k(9, 0.0);
+        for(int i = 0; i < 9; ++i)
+        {
+            if(!(fin >> k[i]))
+            {
+                cerr << "Failed to read 3x3 K matrix (need 9 numbers) from: " << intrinsicsFile << endl;
+                return 1;
+            }
+        }
+        fin.close();
+
+        double fx = k[0];
+        double fy = k[4];
+        double cx = k[2];
+        double cy = k[5];
+
+        // Load original YAML
+        ifstream fyaml(settingsPath.c_str());
+        if(!fyaml.is_open())
+        {
+            cerr << "Failed to open settings file: " << settingsPath << endl;
+            return 1;
+        }
+        vector<string> lines;
+        string line;
+        while(std::getline(fyaml, line)) lines.push_back(line);
+        fyaml.close();
+
+        auto replace_key_value = [](string &ln, const string &key, const string &value)->bool
+        {
+            // Trim leading spaces for key detection
+            size_t i = 0;
+            while(i < ln.size() && (ln[i] == ' ' || ln[i] == '\t')) ++i;
+            const string keyColon = key + ":";
+            if(ln.size() >= i + keyColon.size() && ln.compare(i, keyColon.size(), keyColon) == 0)
+            {
+                ln = ln.substr(0, i) + keyColon + " " + value;
+                return true;
+            }
+            return false;
+        };
+
+        bool r_fx1=false, r_fy1=false, r_cx1=false, r_cy1=false;
+        bool r_fx=false,  r_fy=false,  r_cx=false,  r_cy=false;
+
+        ostringstream sfx, sfy, scx, scy;
+        sfx.setf(std::ios::fixed); sfy.setf(std::ios::fixed); scx.setf(std::ios::fixed); scy.setf(std::ios::fixed);
+        sfx.precision(6); sfy.precision(6); scx.precision(6); scy.precision(6);
+        sfx << fx; sfy << fy; scx << cx; scy << cy;
+
+        for(string &ln : lines)
+        {
+            if(!r_fx1) r_fx1 = replace_key_value(ln, "Camera1.fx", sfx.str());
+            if(!r_fy1) r_fy1 = replace_key_value(ln, "Camera1.fy", sfy.str());
+            if(!r_cx1) r_cx1 = replace_key_value(ln, "Camera1.cx", scx.str());
+            if(!r_cy1) r_cy1 = replace_key_value(ln, "Camera1.cy", scy.str());
+
+            if(!r_fx)  r_fx  = replace_key_value(ln, "Camera.fx", sfx.str());
+            if(!r_fy)  r_fy  = replace_key_value(ln, "Camera.fy", sfy.str());
+            if(!r_cx)  r_cx  = replace_key_value(ln, "Camera.cx", scx.str());
+            if(!r_cy)  r_cy  = replace_key_value(ln, "Camera.cy", scy.str());
+        }
+
+        // If none of the keys existed, append Camera1.* at end
+        if(!(r_fx1||r_fx))   lines.push_back(string("Camera1.fx: ") + sfx.str());
+        if(!(r_fy1||r_fy))   lines.push_back(string("Camera1.fy: ") + sfy.str());
+        if(!(r_cx1||r_cx))   lines.push_back(string("Camera1.cx: ") + scx.str());
+        if(!(r_cy1||r_cy))   lines.push_back(string("Camera1.cy: ") + scy.str());
+
+        // Write patched YAML to temporary path
+        ostringstream tmpname;
+        tmpname << "/tmp/orbslam3_settings_" << getpid() << ".yaml";
+        patchedSettingsPath = tmpname.str();
+
+        ofstream fout(patchedSettingsPath.c_str());
+        if(!fout.is_open())
+        {
+            cerr << "Failed to write patched settings file: " << patchedSettingsPath << endl;
+            return 1;
+        }
+        for(const string &l : lines) fout << l << '\n';
+        fout.close();
+
+        settingsPath = patchedSettingsPath;
+        cout << "[INFO] Using intrinsics from '" << intrinsicsFile << "' -> fx=" << fx << ", fy=" << fy << ", cx=" << cx << ", cy=" << cy << endl;
+        cout << "[INFO] Patched settings written to: " << settingsPath << endl;
+    }
+
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
-    ORB_SLAM3::System SLAM(argv[1],argv[2],ORB_SLAM3::System::RGBD,true);
+    ORB_SLAM3::System SLAM(argv[1], settingsPath.c_str(), ORB_SLAM3::System::RGBD, true);
     float imageScale = SLAM.GetImageScale();
 
     // Vector for tracking time statistics
@@ -131,11 +291,11 @@ int main(int argc, char **argv)
     cout << "mean tracking time: " << totaltime/nImages << endl;
 
     // Save camera trajectory
-    SLAM.SaveTrajectoryTUM("CameraTrajectory.txt");
-    SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");   
+    SLAM.SaveTrajectoryTUM(outTrajFile);
+    SLAM.SaveKeyFrameTrajectoryTUM(outKFFile);   
 
     // Save the sparse map as PLY
-    SLAM.SaveMapToPLY("3d_map.ply");
+    SLAM.SaveMapToPLY(outMapPLY);
 
     return 0;
 }
