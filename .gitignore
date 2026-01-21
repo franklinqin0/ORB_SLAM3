@@ -60,6 +60,7 @@ CameraTrajectory.txt
 kf_*.txt
 f_*.txt
 Thirdparty/opencv/
+Thirdparty/Pangolin/
 Thirdparty/DBoW2/build/
 Thirdparty/DBoW2/lib/
 Thirdparty/g2o/build/
